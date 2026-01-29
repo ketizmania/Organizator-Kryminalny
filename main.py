@@ -21,7 +21,6 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   imie TEXT, nazwisko TEXT, klub TEXT, 
                   adres TEXT, info TEXT, pojazdy TEXT)''')
-    # Wymuszenie dodania kolumny jeśli baza jest stara
     try:
         c.execute("ALTER TABLE osoby ADD COLUMN pojazdy TEXT")
     except:
@@ -30,10 +29,16 @@ def init_db():
     return conn
 
 def main(page: ft.Page):
-    page.title = "OSK v2.7"
+    page.title = "OSK v2.8"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 15
-    page.scroll = "adaptive" # Pozwala na płynne przewijanie całej strony
+    page.scroll = "adaptive"
+
+    def copy_error_to_clipboard(err_text):
+        page.set_clipboard(err_text)
+        page.snack_bar = ft.SnackBar(ft.Text("Skopiowano błąd do schowka!"))
+        page.snack_bar.open = True
+        page.update()
 
     try:
         conn = init_db()
@@ -77,16 +82,15 @@ def main(page: ft.Page):
             r = c.fetchone()
             if r:
                 txt_imie.value, txt_nazwisko.value, txt_klub.value = r[1], r[2], r[3]
-                txt_info.value, txt_pojazdy.value = r[5], (r[6] if len(r)>6 else "")
-                page.snack_bar = ft.SnackBar(ft.Text("Wczytano akta"))
+                txt_info.value = r[5]
+                txt_pojazdy.value = r[6] if len(r) > 6 else ""
+                page.snack_bar = ft.SnackBar(ft.Text("Wczytano dane"))
                 page.snack_bar.open = True
-                # Automatyczne przewinięcie do formularza (opcjonalne)
-                page.scroll_to(key="formularz", duration=500)
                 page.update()
 
         def zapisz(e):
             if not txt_nazwisko.value:
-                page.snack_bar = ft.SnackBar(ft.Text("Podaj nazwisko!"))
+                page.snack_bar = ft.SnackBar(ft.Text("Błąd: Nazwisko jest wymagane!"))
                 page.snack_bar.open = True
                 page.update()
                 return
@@ -99,7 +103,7 @@ def main(page: ft.Page):
                 c.execute("UPDATE osoby SET imie=?, nazwisko=?, klub=?, info=?, pojazdy=? WHERE id=?", d + (state["id"],))
             conn.commit()
             odswiez_liste()
-            page.snack_bar = ft.SnackBar(ft.Text("Zapisano dane"))
+            page.snack_bar = ft.SnackBar(ft.Text("Zapisano pomyślnie"))
             page.snack_bar.open = True
             page.update()
 
@@ -119,15 +123,12 @@ def main(page: ft.Page):
             on_change=odswiez_liste
         )
 
-        # --- UKŁAD STRONY ---
         page.add(
-            ft.Text("OSK SYSTEM 2.7", size=24, weight="bold", color=ft.colors.BLUE_400),
+            ft.Text("OSK SYSTEM 2.8", size=24, weight="bold", color=ft.colors.BLUE_400),
             ft.Divider(),
-            ft.Text("WYSZUKAJ OSOBĘ", size=12, weight="bold"),
             search_bar,
             lista_wynikow,
             ft.Divider(height=40),
-            ft.Text("EDYCJA / NOWE AKTA", key="formularz", size=12, weight="bold"),
             txt_imie,
             txt_nazwisko,
             txt_klub,
@@ -135,16 +136,33 @@ def main(page: ft.Page):
             txt_info,
             ft.Row([
                 ft.ElevatedButton("ZAPISZ", icon=ft.icons.SAVE, on_click=zapisz, expand=True),
-                ft.IconButton(ft.icons.DELETE, icon_color="red", on_click=usun)
+                ft.IconButton(ft.icons.DELETE, icon_color=ft.colors.RED_400, on_click=usun)
             ]),
-            ft.ElevatedButton("WYCZYŚĆ / NOWY", on_click=lambda _: [setattr(txt_imie, 'value', ''), setattr(txt_nazwisko, 'value', ''), setattr(state, 'id', None), page.update()]),
-            ft.Container(height=100) # Miejsce na dole
+            ft.ElevatedButton("NOWY WPIS", on_click=lambda _: [setattr(txt_imie, 'value', ''), setattr(txt_nazwisko, 'value', ''), setattr(state, 'id', None), page.update()]),
+            ft.Container(height=50)
         )
         odswiez_liste()
 
     except Exception as ex:
-        page.add(ft.Text(f"BŁĄD KRYTYCZNY: {ex}", color="red"))
+        err_msg = str(ex)
+        page.clean()
+        page.add(
+            ft.Container(
+                padding=20,
+                bgcolor=ft.colors.RED_900,
+                border_radius=10,
+                content=ft.Column([
+                    ft.Text("BŁĄD KRYTYCZNY", weight="bold", size=20, color=ft.colors.WHITE),
+                    ft.Text(err_msg, color=ft.colors.WHITE),
+                    ft.ElevatedButton(
+                        "KOPIUJ TREŚĆ BŁĘDU", 
+                        icon=ft.icons.COPY, 
+                        on_click=lambda _: copy_error_to_clipboard(err_msg)
+                    )
+                ])
+            )
+        )
         page.update()
 
 ft.app(target=main)
-                
+            
