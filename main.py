@@ -3,20 +3,21 @@ import sqlite3
 import os
 import sys
 
-# --- BEZPIECZNE USTALANIE ŚCIEŻKI DO BAZY ---
+# --- POPRAWKA: BEZPIECZNA ŚCIEŻKA DLA ANDROIDA ---
 def get_db_path():
     try:
-        # Jeśli Android/iOS - szukamy bezpiecznego katalogu dokumentów
-        # Flet nie udostępnia tego wprost w module os, ale spróbujemy zapisać w katalogu domowym
+        # Sprawdzamy, czy jesteśmy w środowisku Androida
         if "ANDROID_DATA" in os.environ:
-            # Specyficzne dla Androida - katalog plików aplikacji
-            # Zazwyczaj /data/data/com.twoja.nazwa/files
-            storage = os.environ.get("EXTERNAL_STORAGE", os.environ.get("HOME", "."))
+            # Zamiast szukać karty SD (EXTERNAL_STORAGE), używamy katalogu domowego aplikacji.
+            # Na Androidzie 'HOME' wskazuje na /data/data/com.twoja.paczka/files
+            # Jest to katalog, do którego aplikacja ma ZAWSZE pełny dostęp.
+            storage = os.environ.get("HOME", ".")
             return os.path.join(storage, "kryminalne.db")
         else:
-            # Windows/Linux/Mac
+            # Windows/Linux/Mac - plik tworzy się obok programu
             return "kryminalne.db"
     except Exception:
+        # Awaryjny fallback
         return "kryminalne.db"
 
 # --- BAZA DANYCH ---
@@ -35,18 +36,22 @@ def main(page: ft.Page):
     # --- KONFIGURACJA OKNA ---
     page.title = "Organizator Spraw Kryminalnych"
     page.theme_mode = ft.ThemeMode.DARK
-    page.scroll = "adaptive" # Ważne dla Androida, żeby można było przewijać
+    page.scroll = "adaptive" 
 
     # --- TRYB AWARYJNY (TRY-EXCEPT) ---
-    # Cała logika jest w bloku try, żeby wyłapać błąd czarnego ekranu
     try:
         db_path = get_db_path()
         
-        # Próba połączenia z bazą
+        # Próba połączenia z bazą - teraz ze ścieżką wyświetloną w razie błędu
         try:
             conn = init_db(db_path)
         except Exception as db_e:
-            page.add(ft.Text(f"BŁĄD KRYTYCZNY BAZY DANYCH:\n{db_e}\nŚcieżka: {db_path}", color="red", size=20))
+            page.add(ft.Column([
+                ft.Icon(ft.icons.ERROR, color="red", size=50),
+                ft.Text(f"BŁĄD DOSTĘPU DO BAZY!", color="red", weight="bold"),
+                ft.Text(f"Próbowano zapisać w:\n{db_path}"),
+                ft.Text(f"Szczegóły błędu:\n{db_e}")
+            ]))
             return
 
         selected_osoba_id = None
@@ -60,7 +65,6 @@ def main(page: ft.Page):
         txt_info = ft.TextField(label="Notatki", multiline=True, min_lines=2)
         img_profile = ft.Image(src="https://via.placeholder.com/150", width=150, height=150, fit=ft.ImageFit.CONTAIN)
         
-        # Używamy Column zamiast ListView wewnątrz Row dla lepszej kontroli błędów
         lista_osob_container = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         lista_aut = ft.Column(spacing=5)
 
@@ -131,8 +135,6 @@ def main(page: ft.Page):
                 for v in c.fetchall():
                     lista_aut.controls.append(ft.Text(f"• {v[0]} [{v[1]}]", size=16))
                 
-                # Na telefonie przełączamy widok na detale (opcjonalnie)
-                # Tu dla prostoty zostawiamy widok dzielony
                 page.update()
 
         def zapisz_osobe(e):
@@ -181,7 +183,7 @@ def main(page: ft.Page):
             dialog.open = True
             page.update()
 
-        # --- BUDOWANIE LAYOUTU ---
+        # --- UKŁAD GRAFICZNY ---
         search_bar = ft.TextField(
             label="Szukaj...", 
             prefix_icon=ft.icons.SEARCH, 
@@ -194,7 +196,7 @@ def main(page: ft.Page):
                 ft.Column([
                     ft.ElevatedButton("FOTO", icon=ft.icons.IMAGE, 
                                      on_click=lambda _: file_picker.pick_files(allow_multiple=False)),
-                    ft.Text("Dane podstawowe", weight="bold")
+                    ft.Text("Edycja danych", weight="bold")
                 ])
             ]),
             txt_imie, txt_nazwisko,
@@ -206,20 +208,26 @@ def main(page: ft.Page):
                 ft.IconButton(ft.icons.ADD_CIRCLE, on_click=dodaj_pojazd)
             ]),
             lista_aut,
-            ft.ElevatedButton("ZAPISZ", icon=ft.icons.SAVE, on_click=zapisz_osobe)
+            ft.ElevatedButton("ZAPISZ DANE", icon=ft.icons.SAVE, on_click=zapisz_osobe)
         ], scroll=ft.ScrollMode.AUTO, expand=True)
 
-        # Responsywny widok
-        layout = ft.Row([
-            ft.Column([search_bar, lista_osob_container], expand=1),
-            ft.VerticalDivider(width=1),
-            ft.Column([detale_column], expand=2)
-        ], expand=True)
-
-        if page.window_width < 600:
-             # Tryb mobilny - jedna kolumna (uproszczony)
-             # W pełnej wersji użylibyśmy nawigacji Tabs
-             pass 
+        # Uproszczony widok responsywny
+        # Na małym ekranie (telefon) układamy rzeczy pionowo
+        # W prostym prototypie użyjemy po prostu kolumny, która na PC będzie wyglądać ok, a na telefonie się zmieści
+        if page.window_width < 600 or True: # Wymuszamy układ pionowy dla pewności na mobilkach
+            layout = ft.Column([
+                search_bar,
+                ft.Container(content=lista_osob_container, height=200, border=ft.border.all(1, "grey"), border_radius=5),
+                ft.Divider(),
+                detale_column
+            ], expand=True)
+        else:
+            # Układ poziomy dla dużych ekranów
+            layout = ft.Row([
+                ft.Column([search_bar, lista_osob_container], expand=1),
+                ft.VerticalDivider(width=1),
+                ft.Column([detale_column], expand=2)
+            ], expand=True)
 
         page.add(
             ft.Text("Organizator Spraw Kryminalnych", size=20, weight="bold"),
@@ -229,8 +237,7 @@ def main(page: ft.Page):
         odswiez_liste()
 
     except Exception as e:
-        # TO JEST KLUCZOWE - jeśli coś wybuchnie, zobaczysz to na ekranie
         page.add(ft.Text(f"CRITICAL ERROR STARTUP:\n{e}", color="red", size=20))
 
 ft.app(target=main)
-        
+                
