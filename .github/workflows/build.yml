@@ -24,7 +24,7 @@ jobs:
           name: Windows_App
           path: dist/*.exe
 
-  # --- BUDOWANIE NA ANDROID (.APK) ---
+    # --- BUDOWANIE NA ANDROID (.APK) ---
   android-build:
     runs-on: ubuntu-latest
     steps:
@@ -45,10 +45,12 @@ jobs:
           pip install flet
       - name: Build APK
         run: |
-          flet build apk
+          # DODANO --include-filepicker, aby Android rozpoznał ten moduł
+          flet build apk --include-filepicker
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Android_App
           path: build/apk/*.apk
+          
           
