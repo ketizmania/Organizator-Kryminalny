@@ -2,7 +2,7 @@ name: Build App (Windows and Android)
 on: [push]
 
 jobs:
-  # --- BUDOWANIE NA WINDOWS (.EXE) ---
+    # --- BUDOWANIE NA WINDOWS (.EXE) ---
   windows-build:
     runs-on: windows-latest
     steps:
@@ -14,9 +14,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install flet pyinstaller
-      - name: Build EXE
+      - name: Build EXE Manual
         run: |
-          flet pack main.py --name "Organizator_Kryminalny"
+          # Używamy bezpośrednio PyInstallera, co omija błąd flet pack
+          pyinstaller --noconfirm --onefile --windowed --name "Organizator_Kryminalny" main.py
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
