@@ -16,7 +16,7 @@ jobs:
           pip install flet
       - name: Build EXE
         run: |
-          flet pack main.py --name "Organizator_Alaska"
+          flet pack main.py --name "Organizator_Kryminalny"
       - name: Upload EXE
         uses: actions/upload-artifact@v3
         with:
