@@ -16,10 +16,10 @@ def init_db(db_path):
     conn = sqlite3.connect(db_path, check_same_thread=False)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS osoby 
-                 (id INTEGER PRIMARY KEY, imie TEXT, nazwisko TEXT, 
+                 (id PRIMARY KEY, imie TEXT, nazwisko TEXT, 
                   klub TEXT, adres TEXT, foto_path TEXT, info TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS pojazdy 
-                 (id INTEGER PRIMARY KEY, osoba_id INTEGER, model TEXT, rej TEXT)''')
+                 (id PRIMARY KEY, osoba_id INTEGER, model TEXT, rej TEXT)''')
     conn.commit()
     return conn
 
@@ -28,16 +28,19 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.scroll = "adaptive"
 
+    def copy_error(e_text):
+        page.set_clipboard(e_text)
+        page.snack_bar = ft.SnackBar(ft.Text("Skopiowano błąd do schowka!"))
+        page.snack_bar.open = True
+        page.update()
+
     try:
         db_path = get_db_path()
         conn = init_db(db_path)
 
-        state = {
-            "id": None,
-            "foto": None
-        }
+        state = {"id": None, "foto": None}
 
-        # --- ELEMENTY INTERFEJSU ---
+        # --- ELEMENTY ---
         txt_imie = ft.TextField(label="Imię")
         txt_nazwisko = ft.TextField(label="Nazwisko")
         txt_klub = ft.TextField(label="Klub/Organizacja")
@@ -48,14 +51,14 @@ def main(page: ft.Page):
         lista_osob = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
         lista_aut = ft.Column(spacing=5)
 
-        # Usunięto jawne określenie typu Eventu, żeby uniknąć błędu AttributeError
-        def on_file_result(e):
+        def handle_file_result(e):
             if e.files:
                 state["foto"] = e.files[0].path
                 img_profile.src = state["foto"]
                 page.update()
 
-        file_picker = ft.FilePicker(on_result=on_file_result)
+        file_picker = ft.FilePicker()
+        file_picker.on_result = handle_file_result
         page.overlay.append(file_picker)
 
         def odswiez_liste(e=None):
@@ -63,19 +66,11 @@ def main(page: ft.Page):
             c = conn.cursor()
             val = search_bar.value if search_bar.value else ""
             search = f"%{val}%"
-            query = """
-                SELECT DISTINCT o.id, o.imie, o.nazwisko, o.klub 
-                FROM osoby o 
-                LEFT JOIN pojazdy p ON o.id = p.osoba_id
-                WHERE o.nazwisko LIKE ? OR p.rej LIKE ?
-                ORDER BY o.nazwisko ASC
-            """
-            c.execute(query, (search, search))
+            c.execute("SELECT id, imie, nazwisko, klub FROM osoby WHERE nazwisko LIKE ? ORDER BY nazwisko ASC", (search,))
             for row in c.fetchall():
                 lista_osob.controls.append(
                     ft.ListTile(
                         title=ft.Text(f"{row[2]} {row[1]}", weight="bold"),
-                        subtitle=ft.Text(f"{row[3]}"),
                         on_click=lambda _, idx=row[0]: pokaz_szczegoly(idx)
                     )
                 )
@@ -130,22 +125,11 @@ def main(page: ft.Page):
 
         search_bar = ft.TextField(label="Szukaj...", on_change=odswiez_liste)
 
-        # --- BUDOWA STRONY ---
         page.add(
             ft.Text("Organizator Spraw Kryminalnych", size=20, weight="bold"),
             search_bar,
             ft.Container(content=lista_osob, height=150, border=ft.border.all(1, "grey")),
-            ft.Divider(),
             ft.Row([img_profile, ft.ElevatedButton("FOTO", on_click=lambda _: file_picker.pick_files())]),
             txt_imie, txt_nazwisko, txt_klub, txt_adres, txt_info,
-            ft.Row([ft.Text("POJAZDY"), ft.IconButton(ft.icons.ADD, on_click=dodaj_pojazd)]),
-            lista_aut,
-            ft.ElevatedButton("ZAPISZ", on_click=zapisz_osobe)
-        )
-        odswiez_liste()
-
-    except Exception as ex:
-        page.add(ft.Text(f"Błąd: {ex}"))
-
-ft.app(target=main)
+            ft.Row([ft.Text("POJAZDY"), ft.IconButton(ft.icons.ADD, on_click
         
