@@ -1,6 +1,10 @@
 import flet as ft
 import sqlite3
 import os
+import sys
+# Poprawka dla PyInstallera
+if getattr(sys, 'frozen', False):
+    os.chdir(sys._MEIPASS)
 
 def get_db_path():
     try:
