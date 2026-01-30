@@ -1,29 +1,7 @@
-name: Build App (Windows and Android)
+name: Build App Sterylny
 on: [push]
 
 jobs:
-  # --- WINDOWS (STABILNY) ---
-  windows-build:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - name: Install dependencies
-        run: |
-          pip install flet pyinstaller
-      - name: Build EXE
-        run: |
-          pyinstaller --noconfirm --onefile --windowed --name "Organizator_Kryminalny" main.py
-      - name: Upload EXE
-        uses: actions/upload-artifact@v4
-        with:
-          name: Windows_App
-          path: dist/*.exe
-
-  # --- ANDROID (POPRAWKA KOTLIN) ---
   android-build:
     runs-on: ubuntu-latest
     steps:
@@ -35,11 +13,15 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Install Flet
-        run: pip install flet
+        run: |
+          pip install flet==0.21.2
       - name: Build APK
         run: |
-          # Czyścimy cache przed budowaniem
           flet build apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
