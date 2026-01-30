@@ -1,114 +1,98 @@
 import flet as ft
 import sqlite3
 import os
-import sys
-
-# Poprawka dla PyInstallera
-if getattr(sys, 'frozen', False):
-    os.chdir(sys._MEIPASS)
 
 def get_db_path():
+    # Zmieniamy nazwę na nową, by uniknąć konfliktów z poprzednimi wersjami
+    db_name = "osk_database_v30.db"
     if "ANDROID_DATA" in os.environ:
-        storage = os.environ.get("HOME", ".")
-        return os.path.join(storage, "kryminalne.db")
-    return "kryminalne.db"
+        return os.path.join(os.environ.get("HOME", "."), db_name)
+    return db_name
 
-def init_db(db_path):
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS osoby (id INTEGER PRIMARY KEY AUTOINCREMENT, imie TEXT, nazwisko TEXT, klub TEXT, adres TEXT, info TEXT, pojazdy TEXT)')
-    # Migracja kolumny pojazdy
+def init_db():
+    path = get_db_path()
     try:
-        c.execute("ALTER TABLE osoby ADD COLUMN pojazdy TEXT")
-    except:
-        pass
-    conn.commit()
-    return conn
+        # Próba połączenia
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.execute('''CREATE TABLE IF NOT EXISTS osoby 
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      imie TEXT, nazwisko TEXT, klub TEXT, 
+                      info TEXT, pojazdy TEXT)''')
+        conn.commit()
+        return conn
+    except Exception as e:
+        # Jeśli baza jest uszkodzona/zablokowana - usuwamy ją i tworzymy od nowa
+        if os.path.exists(path):
+            os.remove(path)
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.execute('''CREATE TABLE IF NOT EXISTS osoby 
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      imie TEXT, nazwisko TEXT, klub TEXT, 
+                      info TEXT, pojazdy TEXT)''')
+        return conn
 
 def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
-    page.scroll = "auto"  # Zmienione na standardowe przewijanie
+    page.title = "OSK v3.0 - Stabilny"
     
-    db_path = get_db_path()
-    conn = init_db(db_path)
-    state = {"id": None}
-
-    # --- ELEMENTY FORMULARZA ---
-    txt_imie = ft.TextField(label="Imię")
-    txt_nazwisko = ft.TextField(label="Nazwisko")
-    txt_klub = ft.TextField(label="Klub")
-    txt_pojazdy = ft.TextField(label="Pojazdy", multiline=True)
-    txt_info = ft.TextField(label="Notatki", multiline=True)
-    
-    lista_osob = ft.Column() # Prosta kolumna zamiast ListView (bezpieczniejsza)
-
-    def odswiez_liste(e=None):
-        lista_osob.controls.clear()
-        c = conn.cursor()
-        val = f"%{search_bar.value}%" if search_bar.value else "%"
-        # Wyszukiwanie po Imieniu LUB Nazwisku
-        c.execute("SELECT id, imie, nazwisko FROM osoby WHERE nazwisko LIKE ? OR imie LIKE ?", (val, val))
-        for row in c.fetchall():
-            lista_osob.controls.append(
-                ft.ListTile(
-                    title=ft.Text(f"{row[2]} {row[1]}"), 
-                    on_click=lambda _, idx=row[0]: wczytaj_osobe(idx)
-                )
-            )
+    # Funkcja do kopiowania błędu (na wszelki wypadek)
+    def copy_err(text):
+        page.set_clipboard(text)
+        page.snack_bar = ft.SnackBar(ft.Text("Skopiowano błąd!"))
+        page.snack_bar.open = True
         page.update()
 
-    def wczytaj_osobe(idx):
-        state["id"] = idx
-        c = conn.cursor()
-        c.execute("SELECT * FROM osoby WHERE id=?", (idx,))
-        r = c.fetchone()
-        if r:
-            txt_imie.value, txt_nazwisko.value, txt_klub.value = r[1], r[2], r[3]
-            txt_info.value = r[5]
-            txt_pojazdy.value = r[6] if len(r) > 6 else ""
+    try:
+        conn = init_db()
+
+        t_imie = ft.TextField(label="Imię")
+        t_nazwisko = ft.TextField(label="Nazwisko")
+        t_klub = ft.TextField(label="Klub")
+        t_pojazdy = ft.TextField(label="Pojazdy", multiline=True)
+        t_info = ft.TextField(label="Notatki", multiline=True)
+        lista = ft.Column()
+
+        def zapisz(e):
+            if t_nazwisko.value:
+                conn.execute("INSERT INTO osoby (imie, nazwisko, klub, info, pojazdy) VALUES (?,?,?,?,?)", 
+                             (t_imie.value, t_nazwisko.value, t_klub.value, t_info.value, t_pojazdy.value))
+                conn.commit()
+                t_imie.value = t_nazwisko.value = t_klub.value = t_info.value = t_pojazdy.value = ""
+                odswiez()
+
+        def odswiez(e=None):
+            lista.controls.clear()
+            cur = conn.execute("SELECT imie, nazwisko FROM osoby ORDER BY id DESC LIMIT 10")
+            for r in cur:
+                lista.controls.append(ft.Text(f"• {r[1]} {r[0]}", size=16))
             page.update()
 
-    def zapisz(e):
-        if not txt_nazwisko.value: return
-        c = conn.cursor()
-        d = (txt_imie.value, txt_nazwisko.value, txt_klub.value, txt_info.value, txt_pojazdy.value)
-        if state["id"] is None:
-            c.execute("INSERT INTO osoby (imie, nazwisko, klub, info, pojazdy) VALUES (?,?,?,?,?)", d)
-        else:
-            c.execute("UPDATE osoby SET imie=?, nazwisko=?, klub=?, info=?, pojazdy=? WHERE id=?", d + (state["id"],))
-        conn.commit()
-        odswiez_liste()
+        page.add(
+            ft.Text("SYSTEM OPERACYJNY v3.0", size=22, weight="bold", color=ft.colors.BLUE_400),
+            t_imie, t_nazwisko, t_klub, t_pojazdy, t_info,
+            ft.Row([
+                ft.ElevatedButton("ZAPISZ", on_click=zapisz, icon=ft.icons.SAVE),
+                ft.ElevatedButton("ODŚWIEŻ", on_click=odswiez, icon=ft.icons.REFRESH)
+            ]),
+            ft.Divider(),
+            ft.Text("OSTATNIE WPISY:"),
+            lista
+        )
+        odswiez()
 
-    def usun(e):
-        if state["id"]:
-            c = conn.cursor()
-            c.execute("DELETE FROM osoby WHERE id=?", (state["id"],))
-            conn.commit()
-            state["id"] = None
-            txt_imie.value = txt_nazwisko.value = txt_klub.value = txt_pojazdy.value = txt_info.value = ""
-            odswiez_liste()
-
-    search_bar = ft.TextField(label="Szukaj (Imię/Nazwisko)", on_change=odswiez_liste)
-
-    # --- UKŁAD STRONY (BARDZO PROSTY) ---
-    page.add(
-        ft.Text("Baza Danych OSK", size=20, weight="bold"),
-        search_bar,
-        ft.Text("WYNIKI:"),
-        lista_osob,
-        ft.Divider(),
-        ft.Text("EDYCJA:"),
-        txt_imie, 
-        txt_nazwisko, 
-        txt_klub, 
-        txt_pojazdy, 
-        txt_info,
-        ft.Row([
-            ft.ElevatedButton("ZAPISZ", on_click=zapisz),
-            ft.IconButton(ft.icons.DELETE, icon_color="red", on_click=usun)
-        ]),
-        ft.ElevatedButton("NOWY / WYCZYŚĆ", on_click=lambda _: [setattr(txt_imie, 'value', ''), setattr(txt_nazwisko, 'value', ''), setattr(state, 'id', None), page.update()])
-    )
-    odswiez_liste()
+    except Exception as ex:
+        # WYŚWIETLANIE BŁĘDU JEŚLI APLIKACJA NIE RUSZY
+        err_msg = str(ex)
+        page.add(
+            ft.Container(
+                padding=20, bgcolor=ft.colors.RED_900, border_radius=10,
+                content=ft.Column([
+                    ft.Text("BŁĄD STARTU:", weight="bold"),
+                    ft.Text(err_msg, selectable=True),
+                    ft.ElevatedButton("KOPIUJ BŁĄD", on_click=lambda _: copy_err(err_msg))
+                ])
+            )
+        )
+        page.update()
 
 ft.app(target=main)
