@@ -1,31 +1,24 @@
-name: Build App (Win & Android)
+name: OSK_Build
 on: [push]
 
 jobs:
-  # --- BUDOWANIE NA WINDOWS (.EXE) ---
-  windows-build:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-      - name: Install dependencies
+      - name: Build
         run: |
           pip install flet==0.21.2 pyinstaller
-      - name: Build EXE
-        run: |
-          pyinstaller --noconfirm --onefile --windowed --name "Organizator_Kryminalny" main.py
-      - name: Upload EXE
-        uses: actions/upload-artifact@v4
+          pyinstaller --noconfirm --onefile --windowed main.py
+      - uses: actions/upload-artifact@v4
         with:
-          name: Windows_App
+          name: Windows_Exe
           path: dist/*.exe
 
-  # --- BUDOWANIE NA ANDROID (.APK) ---
-  android-build:
+  android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,22 +26,20 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'
+          # USUNIĘTO CACHE GRADLE, KTÓRY POWODOWAŁ BŁĄD
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          cache: true
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Flet
-        run: pip install flet==0.21.2
-      - name: Build APK
-        run: flet build apk
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Build
+        run: |
+          pip install flet==0.21.2
+          # Flet sam pobierze brakujące komponenty Gradle
+          flet build apk
+      - uses: actions/upload-artifact@v4
         with:
-          name: Android_App
+          name: Android_Apk
           path: build/apk/*.apk
           
